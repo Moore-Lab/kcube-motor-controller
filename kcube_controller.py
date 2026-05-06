@@ -111,13 +111,16 @@ class KCubeController:
         Returns
         -------
         bool
-            True on success.  Returns False (does not raise) if pylablib is
-            unavailable or the device cannot be reached.
+            True on success.
+
+        Raises
+        ------
+        RuntimeError
+            If pylablib is not installed.
+        Exception
+            On any Kinesis / USB communication error (propagated from KCubeConnection).
         """
-        try:
-            return self._conn.connect()
-        except Exception:
-            return False
+        return self._conn.connect()
 
     def disconnect(self) -> None:
         """Close the connection to the KDC101."""
@@ -128,11 +131,20 @@ class KCubeController:
     # =========================================================================
 
     def get_position(self) -> Optional[float]:
-        """Return the current position in mm, or None if not connected."""
+        """Return the actual encoder position in mm, or None if not connected.
+
+        Uses get_encoder() (SCC_GetEncoderCounter) rather than get_position()
+        (SCC_GetPosition) because get_position() returns the commanded setpoint
+        after a move, not the true mechanical position as shown on the KCube
+        display.  Falls back to get_position() if get_encoder() is unavailable.
+        """
         motor = self._conn.motor
         if motor is None:
             return None
-        return float(motor.get_position())
+        try:
+            return float(motor.get_encoder(scale=True))
+        except AttributeError:
+            return float(motor.get_position())
 
     def is_homed(self) -> bool:
         """Return True if the stage has been homed in this session."""
